@@ -17,3 +17,13 @@ def load_data(data_dir):
  Xte, yte, ste = load_split(data_dir, \test\)
  return (Xtr, ytr, str_), (Xte, yte, ste)
 
+
+def load_features(data_dir):
+    path = Path(data_dir) / " features.txt\
+ names = []
+ with open(path, \r\, encoding=\utf-8\) as f:
+ for line in f:
+ parts = line.strip().split(maxsplit=1)
+ names.append(parts[1] if len(parts) == 2 else parts[0])
+ return names
+
