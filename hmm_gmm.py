@@ -33,3 +33,28 @@ class GMMHMM:
         A /= A.sum(axis=1, keepdims=True)
         self.A_ = A
 
+
+    def _log_emission(self, X):
+        return np.column_stack([g.score_samples(X) for g in self.gmms_])
+
+    def _forward(self, logB):
+        T, S = logB.shape
+        alpha = np.full((T, S), -np.inf)
+        alpha[0] = np.log(self.pi_) + logB[0]
+        for t in range(1, T):
+            alpha[t] = logB[t] + logsumexp(
+                alpha[t-1][:, None] + np.log(self.A_), axis=0
+            )
+        return alpha
+
+    def _backward(self, logB):
+        T, S = logB.shape
+        beta = np.full((T, S), -np.inf)
+        beta[-1] = 0.0
+        for t in range(T-2, -1, -1):
+            beta[t] = logsumexp(
+                np.log(self.A_) + logB[t+1][None, :] + beta[t+1][None, :],
+                axis=1
+            )
+        return beta
+
