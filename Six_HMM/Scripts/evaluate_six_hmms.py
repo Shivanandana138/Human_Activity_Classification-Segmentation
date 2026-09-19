@@ -11,18 +11,20 @@ from src.hmm import (
     load_models,
 )
 
-from src.hmm.preprocessing import ACTIVITIES
+from Six_HMM.src.hmm.preprocessing import ACTIVITIES
 
 
 DATA_DIR = (
     r"C:\Users\Shivananda"
     r"\Human_Activity_Classification-Segmentation"
+    r"\Six_HMM"
     r"\Data\UCI HAR Dataset"
 )
 
 MODEL_DIR = (
     r"C:\Users\Shivananda"
     r"\Human_Activity_Classification-Segmentation"
+    r"\Six_HMM"
     r"\models"
 )
 
