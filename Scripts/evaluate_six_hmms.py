@@ -1,4 +1,5 @@
 import numpy as np
+
 from sklearn.metrics import (
     accuracy_score,
     classification_report,
@@ -13,9 +14,17 @@ from src.hmm import (
 from src.hmm.preprocessing import ACTIVITIES
 
 
-DATA_DIR = r"C:\Users\Shivananda\Human_Activity_Classification-Segmentation\Data\UCI HAR Dataset"
+DATA_DIR = (
+    r"C:\Users\Shivananda"
+    r"\Human_Activity_Classification-Segmentation"
+    r"\Data\UCI HAR Dataset"
+)
 
-MODEL_DIR = r"C:\Users\Shivananda\Human_Activity_Classification-Segmentation\models"
+MODEL_DIR = (
+    r"C:\Users\Shivananda"
+    r"\Human_Activity_Classification-Segmentation"
+    r"\models"
+)
 
 
 def main():
@@ -33,7 +42,7 @@ def main():
     print(f"Test samples: {X_test.shape}")
 
     # -----------------------------------------------------
-    # Load six trained HMMs
+    # Load trained HMMs
     # -----------------------------------------------------
 
     print("\nLoading trained HMMs...")
@@ -50,15 +59,11 @@ def main():
 
     print("\nEvaluating six HMMs...")
 
-    activity_names = list(ACTIVITIES.values())
-
     predictions = []
 
     for i, X_sample in enumerate(X_test):
 
-        # Each UCI HAR row is one feature vector.
-        # Convert it into a single-observation sequence.
-
+        # Each UCI HAR row is one 561-feature observation
         X_sample = X_sample.reshape(1, -1)
 
         likelihoods = {}
@@ -67,7 +72,7 @@ def main():
 
             try:
 
-                # Apply the scaler saved with the model
+                # Use the scaler stored during training
                 if hasattr(model, "activity_scaler"):
 
                     X_scaled = (
@@ -98,6 +103,7 @@ def main():
             ):
                 likelihoods[activity_name] = float("-inf")
 
+        # Select activity with highest likelihood
         predicted_activity = max(
             likelihoods,
             key=likelihoods.get
@@ -109,7 +115,8 @@ def main():
 
         if (i + 1) % 500 == 0:
             print(
-                f"Processed {i + 1}/{len(X_test)} samples..."
+                f"Processed "
+                f"{i + 1}/{len(X_test)} samples..."
             )
 
     # -----------------------------------------------------
@@ -135,12 +142,17 @@ def main():
     print("=" * 60)
 
     print(
-        f"\nOverall Accuracy: {accuracy * 100:.2f}%"
+        f"\nOverall Accuracy: "
+        f"{accuracy * 100:.2f}%"
     )
 
     # -----------------------------------------------------
     # Classification report
     # -----------------------------------------------------
+
+    activity_names = list(
+        ACTIVITIES.values()
+    )
 
     print("\nClassification Report:")
 
@@ -186,6 +198,24 @@ def main():
                 for value in row
             )
         )
+
+    # -----------------------------------------------------
+    # Save predictions for error analysis
+    # -----------------------------------------------------
+
+    np.save(
+        "true_labels.npy",
+        np.array(true_labels)
+    )
+
+    np.save(
+        "predicted_labels.npy",
+        np.array(predictions)
+    )
+
+    print("\nSaved prediction files:")
+    print("  true_labels.npy")
+    print("  predicted_labels.npy")
 
 
 if __name__ == "__main__":
