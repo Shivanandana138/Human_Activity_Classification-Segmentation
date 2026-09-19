@@ -2,12 +2,12 @@ import numpy as np
 from hmmlearn.hmm import GaussianHMM
 from sklearn.preprocessing import StandardScaler
 
-from .preprocessing import ACTIVITIES, split_by_activity
+from .preprocessing import (
+    ACTIVITIES,
+    split_by_activity,
+    create_activity_sequences,
+)
 
-
-# ---------------------------------------------------------
-# HMM configuration
-# ---------------------------------------------------------
 
 N_STATES = 8
 RANDOM_STATE = 42
@@ -16,39 +16,8 @@ TOL = 1e-3
 MIN_COVAR = 1e-2
 
 
-# ---------------------------------------------------------
-# Feature scaler
-# ---------------------------------------------------------
-
-def create_scaler(X):
-    """
-    Create a StandardScaler using the training data.
-    """
-    scaler = StandardScaler()
-
-    X = np.asarray(X, dtype=np.float64)
-
-    if not np.all(np.isfinite(X)):
-        raise ValueError(
-            "Training data contains NaN or infinite values."
-        )
-
-    scaler.fit(X)
-
-    return scaler
-
-
-# ---------------------------------------------------------
-# Create HMM
-# ---------------------------------------------------------
-
 def create_hmm():
-    """
-    Create a standard Gaussian HMM.
-
-    One Gaussian emission distribution is used
-    for each hidden state.
-    """
+    """Create a standard Gaussian HMM."""
 
     model = GaussianHMM(
         n_components=N_STATES,
@@ -62,40 +31,18 @@ def create_hmm():
         verbose=False,
     )
 
-    # Uniform initial state probabilities
-    model.startprob_ = np.full(
-        N_STATES,
-        1.0 / N_STATES
-    )
-
-    # Initialize transition matrix
-    transmat = np.full(
-        (N_STATES, N_STATES),
-        0.05 / (N_STATES - 1)
-    )
-
-    np.fill_diagonal(
-        transmat,
-        0.95
-    )
-
-    model.transmat_ = transmat
-
     return model
 
 
-# ---------------------------------------------------------
-# Train one activity HMM
-# ---------------------------------------------------------
-
-def train_activity_hmm(X_activity):
+def train_activity_hmm(X_activity, sequence_lengths):
     """
-    Train one Gaussian HMM for one activity.
+    Train one activity-specific HMM using multiple
+    independent sequences.
     """
 
     if X_activity is None or len(X_activity) == 0:
         raise ValueError(
-            "No training data available for this activity."
+            "No training data available."
         )
 
     X_activity = np.asarray(
@@ -105,18 +52,24 @@ def train_activity_hmm(X_activity):
 
     if not np.all(np.isfinite(X_activity)):
         raise ValueError(
-            "Training data contains NaN or infinite values."
+            "Training data contains NaN or infinity."
+        )
+
+    if sum(sequence_lengths) != len(X_activity):
+        raise ValueError(
+            "Sequence lengths do not match X_activity."
         )
 
     # -----------------------------------------------------
-    # Standardize features
+    # Scale features
     # -----------------------------------------------------
 
-    scaler = create_scaler(X_activity)
+    scaler = StandardScaler()
 
-    X_scaled = scaler.transform(X_activity)
+    X_scaled = scaler.fit_transform(
+        X_activity
+    )
 
-    # Avoid extremely large values
     X_scaled = np.clip(
         X_scaled,
         -10,
@@ -124,39 +77,42 @@ def train_activity_hmm(X_activity):
     )
 
     # -----------------------------------------------------
-    # Create HMM
+    # Create model
     # -----------------------------------------------------
 
     model = create_hmm()
 
     # -----------------------------------------------------
-    # Train
+    # Train using independent sequences
     # -----------------------------------------------------
 
-    model.fit(X_scaled)
+    model.fit(
+        X_scaled,
+        lengths=sequence_lengths
+    )
 
     # -----------------------------------------------------
-    # Check parameters
+    # Validate parameters
     # -----------------------------------------------------
 
     if not np.all(np.isfinite(model.startprob_)):
         raise ValueError(
-            "HMM training produced invalid start probabilities."
+            "Invalid start probabilities."
         )
 
     if not np.all(np.isfinite(model.transmat_)):
         raise ValueError(
-            "HMM training produced invalid transition probabilities."
+            "Invalid transition probabilities."
         )
 
     if not np.all(np.isfinite(model.means_)):
         raise ValueError(
-            "HMM training produced invalid means."
+            "Invalid means."
         )
 
     if not np.all(np.isfinite(model.covars_)):
         raise ValueError(
-            "HMM training produced invalid covariance values."
+            "Invalid covariance values."
         )
 
     # -----------------------------------------------------
@@ -165,15 +121,15 @@ def train_activity_hmm(X_activity):
 
     start_sum = model.startprob_.sum()
 
-    if start_sum <= 0 or not np.isfinite(start_sum):
+    if start_sum <= 0:
         raise ValueError(
-            "Invalid start probability sum after training."
+            "Invalid start probability sum."
         )
 
     model.startprob_ /= start_sum
 
     # -----------------------------------------------------
-    # Fix transition matrix
+    # Repair invalid transition rows
     # -----------------------------------------------------
 
     row_sums = model.transmat_.sum(axis=1)
@@ -184,7 +140,7 @@ def train_activity_hmm(X_activity):
             row_sums[i] <= 0
             or not np.isfinite(row_sums[i])
         ):
-            # Fall back to a stable transition row
+
             model.transmat_[i] = np.full(
                 N_STATES,
                 0.05 / (N_STATES - 1)
@@ -192,7 +148,6 @@ def train_activity_hmm(X_activity):
 
             model.transmat_[i, i] = 0.95
 
-    # Normalize rows
     model.transmat_ /= (
         model.transmat_.sum(
             axis=1,
@@ -200,44 +155,89 @@ def train_activity_hmm(X_activity):
         )
     )
 
-    # -----------------------------------------------------
-    # Store scaler inside model
-    # -----------------------------------------------------
-
+    # Store scaler and sequence information
     model.activity_scaler = scaler
 
     return model
 
 
-# ---------------------------------------------------------
-# Train all six HMMs
-# ---------------------------------------------------------
+def train_six_hmms(X_train, y_train, subject_train):
+    """
+    Train six activity-specific HMMs using
+    subject/activity-based sequences.
+    """
 
-def train_six_hmms(X_train, y_train):
-
-    activity_data = split_by_activity(
+    sequences = create_activity_sequences(
         X_train,
-        y_train
+        y_train,
+        subject_train
     )
 
     models = {}
 
     for activity_name in ACTIVITIES.values():
 
+        activity_label = next(
+            label
+            for label, name in ACTIVITIES.items()
+            if name == activity_name
+        )
+
+        # -------------------------------------------------
+        # Select sequences belonging to this activity
+        # -------------------------------------------------
+
+        activity_sequences = [
+            seq
+            for seq in sequences
+            if seq["activity"] == activity_label
+        ]
+
+        if not activity_sequences:
+            raise ValueError(
+                f"No sequences found for {activity_name}."
+            )
+
+        # -------------------------------------------------
+        # Combine sequences
+        # -------------------------------------------------
+
+        X_parts = [
+            seq["X"]
+            for seq in activity_sequences
+        ]
+
+        X_activity = np.concatenate(
+            X_parts,
+            axis=0
+        )
+
+        sequence_lengths = [
+            len(seq["X"])
+            for seq in activity_sequences
+        ]
+
+        print(
+            f"  Number of sequences: "
+            f"{len(activity_sequences)}"
+        )
+
+        print(
+            f"  Combined samples: "
+            f"{X_activity.shape}"
+        )
+
+        # -------------------------------------------------
+        # Train
+        # -------------------------------------------------
+
         print(
             f"Training HMM for: {activity_name}"
         )
 
-        X_activity = activity_data[
-            activity_name
-        ]
-
-        print(
-            f"  Training samples: {X_activity.shape}"
-        )
-
         model = train_activity_hmm(
-            X_activity
+            X_activity,
+            sequence_lengths
         )
 
         models[activity_name] = model
@@ -249,11 +249,10 @@ def train_six_hmms(X_train, y_train):
     return models
 
 
-# ---------------------------------------------------------
-# Calculate activity likelihoods
-# ---------------------------------------------------------
-
 def get_activity_likelihoods(models, X):
+    """
+    Calculate log-likelihood for each activity HMM.
+    """
 
     X = np.asarray(
         X,
@@ -262,7 +261,7 @@ def get_activity_likelihoods(models, X):
 
     if not np.all(np.isfinite(X)):
         raise ValueError(
-            "Input contains NaN or infinite values."
+            "Input contains NaN or infinity."
         )
 
     likelihoods = {}
@@ -271,41 +270,51 @@ def get_activity_likelihoods(models, X):
 
         try:
 
-            # Apply the same scaler used during training
             if hasattr(model, "activity_scaler"):
-                X_scaled = model.activity_scaler.transform(X)
+
+                X_scaled = (
+                    model.activity_scaler
+                    .transform(X)
+                )
 
                 X_scaled = np.clip(
                     X_scaled,
                     -10,
                     10
                 )
+
             else:
                 X_scaled = X
 
-            score = model.score(X_scaled)
+            score = model.score(
+                X_scaled
+            )
 
             if np.isfinite(score):
                 likelihoods[activity_name] = score
             else:
-                likelihoods[activity_name] = float("-inf")
+                likelihoods[activity_name] = float(
+                    "-inf"
+                )
 
         except (
             ValueError,
             np.linalg.LinAlgError,
-            FloatingPointError
+            FloatingPointError,
         ):
 
-            likelihoods[activity_name] = float("-inf")
+            likelihoods[activity_name] = float(
+                "-inf"
+            )
 
     return likelihoods
 
 
-# ---------------------------------------------------------
-# Predict activity
-# ---------------------------------------------------------
-
 def predict_activity(models, X):
+    """
+    Predict activity using the HMM with
+    highest log-likelihood.
+    """
 
     likelihoods = get_activity_likelihoods(
         models,
@@ -325,4 +334,4 @@ def predict_activity(models, X):
         key=likelihoods.get
     )
 
-    return predicted_activity, likelihoods
+    return predicted_activity, likelihoodss
