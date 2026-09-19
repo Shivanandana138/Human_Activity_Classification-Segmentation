@@ -4,6 +4,8 @@ from src.hmm import (
     save_models,
 )
 
+from src.hmm.preprocessing import load_subject_data
+
 
 DATA_DIR = (
     r"C:\Users\Shivananda"
@@ -26,26 +28,35 @@ def main():
         DATA_DIR
     )
 
-    print(
-        f"Training samples : {X_train.shape}"
+    print(f"Training samples : {X_train.shape}")
+    print(f"Testing samples  : {X_test.shape}")
+
+    print("\nLoading subject information...")
+
+    subject_train, subject_test = load_subject_data(
+        DATA_DIR
     )
 
     print(
-        f"Testing samples  : {X_test.shape}"
+        f"Training subjects: {subject_train.shape}"
     )
 
     print(
-        "\nTraining six activity-specific HMMs..."
+        f"Testing subjects : {subject_test.shape}"
+    )
+
+    print(
+        "\nTraining six activity-specific HMMs "
+        "using sequences..."
     )
 
     models = train_six_hmms(
         X_train,
-        y_train
+        y_train,
+        subject_train
     )
 
-    print(
-        "\nSaving trained models..."
-    )
+    print("\nSaving trained models...")
 
     save_models(
         models,
@@ -53,7 +64,8 @@ def main():
     )
 
     print(
-        "\nAll six HMMs trained successfully."
+        "\nAll six sequence-aware HMMs "
+        "trained successfully."
     )
 
 
