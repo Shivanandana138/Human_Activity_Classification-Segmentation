@@ -1,37 +1,33 @@
 import numpy as np
-from hmmlearn.hmm import GMMHMM
+from hmmlearn.hmm import GaussianHMM
 
 from .preprocessing import ACTIVITIES, split_by_activity
 
 
 # ---------------------------------------------------------
-# Base-paper configuration
+# HMM configuration
 # ---------------------------------------------------------
 
 N_STATES = 8
-N_MIXTURES = 10
-
 RANDOM_STATE = 42
 N_ITER = 100
 TOL = 1e-3
 
 
 # ---------------------------------------------------------
-# Create one GMM-HMM
+# Create one normal HMM
 # ---------------------------------------------------------
 
 def create_hmm():
     """
-    Create a single activity-specific GMM-HMM.
+    Create a standard Gaussian HMM.
 
-    Configuration:
-        8 hidden states
-        10 Gaussian mixtures per state
+    Each hidden state has one Gaussian emission
+    distribution.
     """
 
-    model = GMMHMM(
+    model = GaussianHMM(
         n_components=N_STATES,
-        n_mix=N_MIXTURES,
         covariance_type="diag",
         n_iter=N_ITER,
         tol=TOL,
@@ -43,26 +39,18 @@ def create_hmm():
 
 
 # ---------------------------------------------------------
-# Train one activity HMM
+# Train one activity-specific HMM
 # ---------------------------------------------------------
 
 def train_activity_hmm(X_activity):
     """
-    Train one HMM for a single activity.
-
-    Parameters
-    ----------
-    X_activity : numpy.ndarray
-        Shape: (number_of_observations, 561)
-
-    Returns
-    -------
-    model : GMMHMM
-        Trained activity-specific HMM.
+    Train one HMM using data belonging to one activity.
     """
 
     if len(X_activity) == 0:
-        raise ValueError("No training data available for this activity.")
+        raise ValueError(
+            "No training data available for this activity."
+        )
 
     model = create_hmm()
 
@@ -77,55 +65,49 @@ def train_activity_hmm(X_activity):
 
 def train_six_hmms(X_train, y_train):
     """
-    Train six separate HMMs, one for each activity.
-
-    Returns
-    -------
-    models : dict
-        Dictionary containing six trained HMMs.
+    Train one separate HMM for each of the six activities.
     """
 
-    activity_data = split_by_activity(X_train, y_train)
+    activity_data = split_by_activity(
+        X_train,
+        y_train
+    )
 
     models = {}
 
     for activity_name in ACTIVITIES.values():
 
-        print(f"Training HMM for: {activity_name}")
+        print(
+            f"Training HMM for: {activity_name}"
+        )
 
         X_activity = activity_data[activity_name]
 
-        model = train_activity_hmm(X_activity)
+        print(
+            f"  Training samples: {X_activity.shape}"
+        )
+
+        model = train_activity_hmm(
+            X_activity
+        )
 
         models[activity_name] = model
 
-        print(f"Finished: {activity_name}")
+        print(
+            f"Finished: {activity_name}"
+        )
 
     return models
 
 
 # ---------------------------------------------------------
-# Calculate likelihood under all six HMMs
+# Calculate likelihood under every HMM
 # ---------------------------------------------------------
 
 def get_activity_likelihoods(models, X):
     """
-    Calculate the log-likelihood of observations under
-    each of the six activity-specific HMMs.
-
-    Parameters
-    ----------
-    models : dict
-        Six trained HMMs.
-
-    X : numpy.ndarray
-        Observation sequence.
-        Shape: (number_of_observations, 561)
-
-    Returns
-    -------
-    likelihoods : dict
-        Log-likelihood for each activity.
+    Calculate the log-likelihood of X under
+    each activity-specific HMM.
     """
 
     likelihoods = {}
@@ -133,12 +115,20 @@ def get_activity_likelihoods(models, X):
     for activity_name, model in models.items():
 
         try:
-            log_likelihood = model.score(X)
 
-        except ValueError:
-            log_likelihood = float("-inf")
+            score = model.score(X)
 
-        likelihoods[activity_name] = log_likelihood
+            if np.isfinite(score):
+                likelihoods[activity_name] = score
+            else:
+                likelihoods[activity_name] = float("-inf")
+
+        except (
+            ValueError,
+            np.linalg.LinAlgError
+        ):
+
+            likelihoods[activity_name] = float("-inf")
 
     return likelihoods
 
@@ -149,14 +139,14 @@ def get_activity_likelihoods(models, X):
 
 def predict_activity(models, X):
     """
-    Predict the activity with the highest HMM likelihood.
-
-    Note:
-        This is the basic six-HMM decision.
-        ASM is NOT included here.
+    Predict the activity whose HMM gives
+    the highest log-likelihood.
     """
 
-    likelihoods = get_activity_likelihoods(models, X)
+    likelihoods = get_activity_likelihoods(
+        models,
+        X
+    )
 
     predicted_activity = max(
         likelihoods,
