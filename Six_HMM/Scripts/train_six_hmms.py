@@ -1,21 +1,23 @@
-from src.hmm import (
+from Six_HMM.src.hmm import (
     load_uci_har,
     train_six_hmms,
     save_models,
 )
 
-from src.hmm.preprocessing import load_subject_data
+from Six_HMM.src.hmm  import load_subject_data
 
 
 DATA_DIR = (
     r"C:\Users\Shivananda"
     r"\Human_Activity_Classification-Segmentation"
+    r"\Six_HMM"
     r"\Data\UCI HAR Dataset"
 )
 
 MODEL_DIR = (
     r"C:\Users\Shivananda"
     r"\Human_Activity_Classification-Segmentation"
+    r"\Six_HMM"
     r"\models"
 )
 
