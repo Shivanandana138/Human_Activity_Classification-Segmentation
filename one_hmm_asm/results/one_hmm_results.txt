@@ -1,0 +1,20 @@
+ONE HMM RESULTS
+================
+
+Number of states: 6
+Training iterations: 100
+
+State -> Activity mapping
+-------------------------
+State 0 -> Activity 3
+State 1 -> Activity 5
+State 2 -> Activity 5
+State 3 -> Activity 1
+State 4 -> Activity 2
+State 5 -> Activity 6
+
+Metrics
+-------
+Error rate: 54.7336%
+Precision:  40.0232%
+Recall:     44.7988%
